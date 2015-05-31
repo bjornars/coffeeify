@@ -1,6 +1,8 @@
 ﻿var coffee = require('coffee-script');
+var fs = require('fs');
 var through = require('through');
 var convert = require('convert-source-map');
+var sha1 = require('sha1');
 
 function isCoffee (file) {
     return (/\.((lit)?coffee|coffee\.md)$/).test(file);
@@ -42,7 +44,33 @@ ParseError.prototype.inspect = function () {
     return this.annotated;
 };
 
+
 function compile(file, data, callback) {
+  var hash = sha1(data);
+  var cachePath = '/tmp/coffeeify_cache/';
+  var path = cachePath + hash;
+
+  fs.exists(path, function(exists) {
+    if (exists) {
+      fs.readFile(path, function(err, cached) {
+          if (err) throw err;
+          callback(null, cached.toString());
+        });
+    } else {
+      compileInner(file, data, function(err, compiledData) {
+        if (compiledData) {
+          try { fs.mkdirSync(cachePath); } catch  (e) {}
+          fs.writeFileSync(path, compiledData);
+          callback(null, compiledData);
+        } else {
+          callback(err);
+        }
+      });
+    }
+  });
+};
+
+function compileInner(file, data, callback) {
     var compiled;
     try {
         compiled = coffee.compile(data, {
